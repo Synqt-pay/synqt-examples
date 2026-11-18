@@ -1,0 +1,7 @@
+# Copy to pubspec_overrides.yaml (gitignored) for card mode from the SDK checkouts next to this repo.
+# synqt_card must also be a dependency (flutter pub add, see README); this points it at the checkout.
+dependency_overrides:
+  synqt:
+    path: ../../flutter
+  synqt_card:
+    path: ../../flutter-card

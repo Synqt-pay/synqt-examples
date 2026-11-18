@@ -1,0 +1,11 @@
+{
+  "name": "synqt-web-demo",
+  "private": true,
+  "description": "The SYNQT Web SDK demo page. `npm install` uses the published SDK, `npm run local` the checkout in ../../javascript.",
+  "scripts": {
+    "local": "npm install --no-save ../../javascript"
+  },
+  "dependencies": {
+    "@synqt/js": "^0.1.0"
+  }
+}

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synqt Web Demo</title>
+<!-- A plain test page for trying the SDK against Sandbox or Stable. Open this file in a browser; no server needed.
+     Plain browser controls on purpose, so the SDK's own payment sheet styling stands out. -->
+<link rel="stylesheet" href="demo.css">
+</head>
+<body>
+<h1>Synqt Web Demo <span id="pill" role="status">No payin</span></h1>
+
+<fieldset>
+  <legend>Payin</legend>
+  <label for="environment">Environment</label>
+  <select id="environment"><option>sandbox</option><option>stable</option><option>live</option></select>
+  <label for="paste">Paste from script (output of scripts/sandbox-token.sh)</label>
+  <textarea id="paste" rows="3" placeholder='{"environment":"sandbox","merchantCode":"…","idPayin":"…","token":"…","amount":"100","currencyCode":"ZAR"}'></textarea>
+  <button id="usePaste">Use pasted details</button>
+  <label for="merchantCode">Merchant code</label><input id="merchantCode">
+  <label for="secret">Merchant secret key (only without a private key; testing only)</label>
+  <input id="secret" type="password" autocomplete="off">
+  <button id="tokenFromSecret">Get token with secret key</button>
+  <label for="idPayin">Payin ID</label><input id="idPayin">
+  <label for="token">Token</label><input id="token">
+  <label for="amount">Amount</label><input id="amount" value="100.00">
+  <label for="currencyCode">Currency</label><input id="currencyCode" value="ZAR">
+  <label for="emailAddress">Customer email</label><input id="emailAddress" value="test@example.com">
+  <label for="firstName">Customer first name</label><input id="firstName" value="Test">
+  <label for="lastName">Customer last name</label><input id="lastName" value="Payer">
+</fieldset>
+
+<fieldset>
+  <legend>Pay</legend>
+  <button id="options">Available payment options</button>
+  <button id="operators">Payment operators</button>
+  <label for="method">Method</label>
+  <select id="method"></select>
+  <button id="sheet">Enter details and pay (SDK sheet)</button>
+  <button id="app">Open Payment Web App</button>
+  <button id="status">Get status</button>
+  <p>To see the sheet without a token, pick a method below and click <b>Preview sheet</b>. Paying from it fails with SYNQT's 401, shown in the sheet.</p>
+  <label for="previewMethod">Preview method</label>
+  <select id="previewMethod"></select>
+  <button id="preview">Preview sheet</button>
+</fieldset>
+
+<pre id="output" aria-live="polite"></pre>
+
+<script src="node_modules/@synqt/js/synqt.js"></script><!-- npm install (published SDK) or npm run local (../../javascript) -->
+<script src="demo.js"></script>
+</body>
+</html>

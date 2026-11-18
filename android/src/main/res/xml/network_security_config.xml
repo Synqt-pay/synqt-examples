@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- shortcut: Stable's Instant EFT form posts to http:// though the host serves https. Remove once SYNQT fixes the form target. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">instant.stable.synqt.pro</domain>
+    </domain-config>
+</network-security-config>

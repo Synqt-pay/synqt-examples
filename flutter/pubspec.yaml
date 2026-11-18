@@ -1,0 +1,22 @@
+name: synqt_demo
+description: Test screen for the SYNQT Flutter SDK, the counterpart of the iOS and Android demos.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  # The released SDK from pub.dev, as a real app uses it. To build from the checkout next to this repo instead:
+  # cp pubspec_overrides.local.yaml pubspec_overrides.yaml (rm it to go back). Card mode: see README.
+  synqt: ^0.1.0
+  url_launcher: ^6.3.0
+
+flutter:
+  uses-material-design: true
+
+dev_dependencies:
+  flutter_lints: ^6.0.0

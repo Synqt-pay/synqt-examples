@@ -1,0 +1,4 @@
+# Copy to pubspec_overrides.yaml (gitignored) to build the demo from the SDK checkout next to this repo.
+dependency_overrides:
+  synqt:
+    path: ../../flutter

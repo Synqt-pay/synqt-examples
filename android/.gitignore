@@ -1,0 +1,21 @@
+# Build output and caches
+build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+
+# Machine-specific
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# Credentials must never be committed: merchant keys, keystores, env files
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+.env
+.env.*
