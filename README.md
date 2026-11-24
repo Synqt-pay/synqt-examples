@@ -176,7 +176,7 @@ A payin ID can be used once. For another payment, get a new token (step 3), whic
 
 `flutter/` is a plain test screen, the counterpart of the native demos. Its `lib/main.dart` also shows how to call each part of the SDK: `_payWithSheet`, `_payWithPaymentApp` and `_followStatus` are the places to start.
 
-1. Generate the platform folders once: `cd flutter && flutter create --platforms=ios,android .` (they are not committed). Add the INTERNET permission to `android/app/src/main/AndroidManifest.xml`.
+1. Generate the platform folders once: `cd flutter && flutter create --org com.synqt --platforms=ios,android .` (they are not committed). The app then installs as `com.synqt.synqt_demo` on Android and `com.synqt.synqtDemo` on iOS. Delete the `README.md` and `test/` that `flutter create` adds, and add the INTERNET permission to `android/app/src/main/AndroidManifest.xml`.
 2. The demo installs `synqt` from pub.dev. To build from the `flutter` checkout next to this repo instead, run `cp pubspec_overrides.local.yaml pubspec_overrides.yaml && flutter pub get` in `flutter/`; delete `pubspec_overrides.yaml` and run `flutter pub get` to go back. It's gitignored.
 3. `flutter run` on a simulator, emulator or device.
 4. Get a token: on your Mac, run `SYNQT_MERCHANT=<Merchant ID> SYNQT_KEY=path/to/private-key.pem scripts/sandbox-token.sh 100 ZAR` and tap **Paste from script** (the iOS Simulator shares the Mac's clipboard; on Android, paste the JSON by hand). Or, for merchants without an RSA key, enter the merchant code and secret key and tap **Get token with secret key**. The secret key is deprecated by SYNQT and this shortcut is for testing only; it must never ship in a real app.
