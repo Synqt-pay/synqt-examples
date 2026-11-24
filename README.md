@@ -200,7 +200,7 @@ The Android demo's token script opens the demo over `adb` with the details fille
 
 `javascript/` is a plain HTML, CSS and JavaScript page (`index.html`, `demo.css`, `demo.js`) for trying the SDK against Sandbox or Stable, the counterpart of the other SDKs' demo apps. `demo.js` also shows how to call each part of the SDK.
 
-1. In `javascript/`, run `npm install`. It installs the SDK, `@synqt/js`, from npm. To use the `javascript` checkout next to this repo instead, run `npm run local`; a plain `npm install` switches back. Then open `javascript/index.html` in your browser (double-click it). No server is needed.
+1. In `javascript/`, run `npm install`. It installs the SDK, `@synqt/js`, from npm. To use the `javascript` checkout next to this repo instead, run `npm install` there once, then `npm run local` here, which builds the checkout and links it; a plain `npm install` switches back. Then open `javascript/index.html` in your browser (double-click it). No server is needed.
 2. Get a token: `SYNQT_MERCHANT=<Merchant ID> SYNQT_KEY=path/to/private-key.pem scripts/sandbox-token.sh 100 ZAR` mints a `PAYIN_CREATE` token for a new payin ID and copies the details. Paste them into **Paste from script** and click **Use pasted details**. Add `SYNQT_ENV=stable` for Stable.
 
    Or, for merchants without an RSA key yet: enter the merchant code, amount and currency, then the **Merchant secret key**, and click **Get token with secret key**. It makes a new payin ID, mints a token that also allows the merchant name and the payment operator list, and loads the payment options. SYNQT has deprecated the secret key, and this is for testing only: the key must never be in a real page. The field is a password field and the page doesn't store it.
@@ -211,7 +211,7 @@ The pill at the top shows the payin's status, checked every 5 seconds from the m
 
 To see the sheet without a token, pick any method under **Preview method** and click **Preview sheet**. Paying from it fails with SYNQT's 401, shown in the sheet.
 
-Opened from disk, the page's origin is `null`, so calls to SYNQT only work if its API accepts that origin, and the sheet shows the system font instead of Instrument Sans. If either gets in the way, serve the folder that holds this repo and the SDK checkouts instead (the page loads `synqt.js` and its fonts from `node_modules/@synqt/js/`), for example `python3 -m http.server` there and open http://localhost:8000/synqt-examples/javascript/.
+Opened from disk, the page's origin is `null`, so calls to SYNQT only work if its API accepts that origin, and the sheet shows the system font instead of Instrument Sans. If either gets in the way, serve the folder that holds this repo and the SDK checkouts instead (the page loads `synqt.min.js` and its fonts from `node_modules/@synqt/js/dist/`), for example `python3 -m http.server` there and open http://localhost:8000/synqt-examples/javascript/.
 
 The web SDK has no card add-on.
 
