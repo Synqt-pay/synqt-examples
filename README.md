@@ -205,7 +205,7 @@ The Android demo's token script opens the demo over `adb` with the details fille
 
    Or, for merchants without an RSA key yet: enter the merchant code, amount and currency, then the **Merchant secret key**, and click **Get token with secret key**. It makes a new payin ID, mints a token that also allows the merchant name and the payment operator list, and loads the payment options. SYNQT has deprecated the secret key, and this is for testing only: the key must never be in a real page. The field is a password field and the page doesn't store it.
 3. Click **Available payment options**, pick a method and click **Enter details and pay (SDK sheet)**. On Sandbox the amount decides the outcome: 51 or more succeeds, 3 to 19 fails.
-4. Or click **Open Payment Web App**. Opened from disk the demo's return URL is `https://example.com/return`, so close the popup yourself; served over https, the popup closes itself on `javascript/return.html`.
+4. Or click **Open Payment Web App**. The payer comes back to the **Return URL (https)** field's address; the SDK and SYNQT accept only https. Opened from disk it is prefilled with `https://example.com/return`, so close the popup yourself. If you serve the page over https, it is prefilled with this folder's `return.html` on the page's own origin, and the popup closes itself when the payer returns.
 
 The pill at the top shows the payin's status, checked every 5 seconds from the moment a payment is sent until it is final. A payin ID can be used once, so mint a new token for each payment.
 

@@ -5,15 +5,16 @@ const byId = (id) => document.getElementById(id);
 const fieldValue = (id) => byId(id).value.trim();
 const log = (message) => (byId('output').textContent = `${new Date().toLocaleTimeString()}  ${message}\n` + byId('output').textContent);
 
-// The return URL must be https for the Payment Web App, and on this page's origin for the popup to see the payer come
-// back. Opened from disk the page has no such origin, so the payer closes the popup themselves.
-const returnURL = location.protocol === 'https:' ? new URL('return.html', location.href).href : 'https://example.com/return';
+// The return URL must be https (the SDK and the Payment Web App refuse anything else), and on this page's origin for the
+// popup to see the payer come back. Served over https, it is prefilled with this folder's return.html; otherwise with a
+// placeholder, and the payer closes the popup themselves. Editable like the other fields.
+byId('returnURL').value = location.protocol === 'https:' ? new URL('return.html', location.href).href : 'https://example.com/return';
 
 const payin = () => new Synqt(fieldValue('environment')).payin({
     token: fieldValue('token'),
     payinID: fieldValue('idPayin'),
     money: new Money(fieldValue('amount'), fieldValue('currencyCode')),
-    returnURL,
+    returnURL: fieldValue('returnURL'),
     callbackURL: 'https://example.com/synqt/callback', // your backend in a real integration
 });
 
@@ -113,7 +114,7 @@ byId('previewMethod').replaceChildren(...Synqt.directPaymentMethods.map((method)
 action('preview', () => {
     const previewPayin = new Synqt(fieldValue('environment')).payin({
         token: 'preview', payinID: 'preview-1', money: new Money(fieldValue('amount') || '100.00', fieldValue('currencyCode') || 'ZAR'),
-        returnURL, callbackURL: 'https://example.com/synqt/callback',
+        returnURL: fieldValue('returnURL'), callbackURL: 'https://example.com/synqt/callback',
     });
     return payWithSheet(previewPayin, byId('previewMethod').value);
 });
