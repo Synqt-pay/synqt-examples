@@ -6,11 +6,9 @@ const fieldValue = (id) => byId(id).value.trim();
 const log = (message) => (byId('output').textContent = `${new Date().toLocaleTimeString()}  ${message}\n` + byId('output').textContent);
 
 // The return URL must be https (the SDK and the Payment Web App refuse anything else), and on this page's origin for the
-// popup to see the payer come back. Prefilled with this folder's return.html: here if the page is served over https,
-// else where scripts/serve-https.sh serves it. Editable like the other fields.
-byId('returnURL').value = location.protocol === 'https:'
-    ? new URL('return.html', location.href).href
-    : 'https://localhost:8443/' + new URL('return.html', location.href).pathname.split('/').slice(-3).join('/');
+// popup to see the payer come back. Served over https, it is prefilled with this folder's return.html; otherwise with a
+// placeholder, and the payer closes the popup themselves. Editable like the other fields.
+byId('returnURL').value = location.protocol === 'https:' ? new URL('return.html', location.href).href : 'https://example.com/return';
 
 const payin = () => new Synqt(fieldValue('environment')).payin({
     token: fieldValue('token'),
