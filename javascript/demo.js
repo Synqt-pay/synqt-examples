@@ -1,5 +1,5 @@
 // The demo's behaviour. Each button shows how to call one part of the SDK; see the README for the full steps.
-const {Synqt, Money} = SynqtSDK;
+const {Synqt, Money, IncomingPaymentsApi, isFinal, redirect} = SynqtSDK;
 
 const byId = (id) => document.getElementById(id);
 const fieldValue = (id) => byId(id).value.trim();
@@ -10,15 +10,21 @@ const log = (message) => (byId('output').textContent = `${new Date().toLocaleTim
 // placeholder, and the payer closes the popup themselves. Editable like the other fields.
 byId('returnURL').value = location.protocol === 'https:' ? new URL('return.html', location.href).href : 'https://example.com/return';
 
-const payin = () => new Synqt(fieldValue('environment')).payin({
+const money = () => new Money(fieldValue('amount'), fieldValue('currencyCode'));
+
+// The order being tested, for the SDK's sheet and the Payment Web App.
+const checkout = () => new Synqt(fieldValue('environment')).checkout({
     token: fieldValue('token'),
     payinID: fieldValue('idPayin'),
-    money: new Money(fieldValue('amount'), fieldValue('currencyCode')),
+    money: money(),
     returnURL: fieldValue('returnURL'),
     callbackURL: 'https://example.com/synqt/callback', // your backend in a real integration
 });
 
-// The payin last paid, so Check status asks about it even if the fields change afterwards. A new token clears it.
+// SYNQT's payin API with the token on screen, as in the Carpentum Java SDK.
+const api = () => IncomingPaymentsApi.create(new Synqt(fieldValue('environment')), fieldValue('token'));
+
+// The payin last paid ({api, id, environment}), so Check status asks about it even if the fields change afterwards. A new token clears it.
 let paid;
 
 // Every button reports its result or error in the output area.
@@ -46,7 +52,6 @@ action('tokenFromSecret', async () => {
     const id = `test-${Date.now()}`;
     byId('idPayin').value = id;
     paid = undefined;
-    const money = new Money(fieldValue('amount'), fieldValue('currencyCode'));
     const response = await fetch(SynqtSDK.environments[fieldValue('environment')].apiBaseURL + '/auth-tokens', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Version': '2'},
@@ -55,7 +60,7 @@ action('tokenFromSecret', async () => {
             secret: byId('secret').value,
             validitySecs: 1800,
             operations: ['POST /payins/!availablePaymentOptions', `POST /payins/${id}`, `GET /payins/${id}`, 'GET /merchant-info', 'GET /payment-operators'],
-            money,
+            money: money(),
         }),
     });
     const body = await response.text();
@@ -73,11 +78,11 @@ action('tokenFromSecret', async () => {
 action('options', () => loadOptions());
 
 async function loadOptions() {
-    const offered = await payin().availablePaymentOptions();
-    const supported = new Set(Synqt.directPaymentMethods.map((method) => method.code));
-    const choices = offered.filter((option) => supported.has(option.code));
-    byId('method').replaceChildren(...choices.map((option) => new Option(option.name, option.code)));
-    return `${offered.length} offered, ${choices.length} supported by the sheet: ${choices.map((option) => option.code).join(', ')}`;
+    const offered = (await api().payinAvailablePaymentOptions({money: money()})).data ?? [];
+    const codes = new Set(offered.map((option) => option.paymentMethodCode));
+    const choices = Synqt.directPaymentMethods.filter((method) => codes.has(method.code));
+    byId('method').replaceChildren(...choices.map((method) => new Option(method.name, method.code)));
+    return `${offered.length} offered, ${choices.length} supported by the sheet: ${choices.map((method) => method.code).join(', ')}`;
 }
 
 // Needs a token with GET /payment-operators; a PAYIN_CREATE token does not have it.
@@ -86,8 +91,8 @@ action('operators', async () => {
     return `${ops.length} payment operators\n` + ops.map((operator) => `${operator.code}  ${operator.name}`).join('\n');
 });
 
-async function payWithSheet(payinToPay, paymentMethodCode) {
-    const result = await payinToPay.presentPaymentSheet({
+async function payWithSheet(checkoutToPay, paymentMethodCode, followed) {
+    const result = await checkoutToPay.presentPaymentSheet({
         paymentMethodCode,
         prefill: {
             emailAddress: fieldValue('emailAddress'),
@@ -97,70 +102,71 @@ async function payWithSheet(payinToPay, paymentMethodCode) {
         onPresented: () => log('Sheet on screen'),
         onPaymentStarted: () => {
             log('Payment sent to SYNQT');
-            followStatus(payinToPay);
+            if (followed) followStatus(followed);
         },
     });
-    if (result && result.type === 'redirect' && result.httpMethod === 'GET') window.open(result.url, '_blank');
+    const next = result && redirect(result);
+    if (next?.method === 'GET') window.open(next.url, '_blank');
     return result === null ? 'Sheet closed without paying' : result;
 }
 
 action('sheet', () => {
-    paid = {payin: payin(), environment: fieldValue('environment')};
-    return payWithSheet(paid.payin, byId('method').value);
+    paid = {api: api(), id: fieldValue('idPayin'), environment: fieldValue('environment')};
+    return payWithSheet(checkout(), byId('method').value, paid);
 });
 
 // The whole sheet without a token, for trying every method's form.
 byId('previewMethod').replaceChildren(...Synqt.directPaymentMethods.map((method) => new Option(method.name, method.code)));
 action('preview', () => {
-    const previewPayin = new Synqt(fieldValue('environment')).payin({
+    const previewCheckout = new Synqt(fieldValue('environment')).checkout({
         token: 'preview', payinID: 'preview-1', money: new Money(fieldValue('amount') || '100.00', fieldValue('currencyCode') || 'ZAR'),
         returnURL: fieldValue('returnURL'), callbackURL: 'https://example.com/synqt/callback',
     });
-    return payWithSheet(previewPayin, byId('previewMethod').value);
+    return payWithSheet(previewCheckout, byId('previewMethod').value);
 });
 
 // The Payment Web App has no first or last name parameters, so the name goes as accountName.
 action('app', () => {
-    paid = {payin: payin(), environment: fieldValue('environment')};
-    const appPayin = paid.payin;
+    paid = {api: api(), id: fieldValue('idPayin'), environment: fieldValue('environment')};
     const prefill = {
         emailAddress: fieldValue('emailAddress'),
         accountName: [fieldValue('firstName'), fieldValue('lastName')].filter(Boolean).join(' '),
     };
-    const opened = appPayin.presentPaymentApp({
+    const opened = checkout().presentPaymentApp({
         merchantCode: fieldValue('merchantCode'),
         paymentMethodCode: byId('method').value || undefined,
         prefill: Object.fromEntries(Object.entries(prefill).filter(([, value]) => value)),
         onPresented: () => log('Payment Web App open'),
     });
-    followStatus(appPayin);
+    followStatus(paid);
     return opened;
 });
 
 action('status', async () => {
-    const {payin: checkedPayin, environment} = paid ?? {payin: payin(), environment: fieldValue('environment')};
-    log(`Checking ${checkedPayin.id} on ${environment}`);
-    const status = await checkedPayin.status();
-    showStatus(status);
-    return status;
+    const {api: checkedApi, id, environment} = paid ?? {api: api(), id: fieldValue('idPayin'), environment: fieldValue('environment')};
+    log(`Checking ${id} on ${environment}`);
+    const detail = await checkedApi.getPayin(id);
+    showStatus(detail);
+    return detail;
 });
 
 // The pill shows the payin's status, checked every 5 seconds from the moment a payment is sent until it is final.
 let following;
 const colours = {SUCCESS: 'green', FAILED: 'crimson', REFUSED: 'crimson', PROCESSING: 'darkorange'};
 
-function showStatus(payinStatus) {
-    byId('pill').textContent = payinStatus.status;
-    byId('pill').style.background = colours[payinStatus.status] || 'gray';
+function showStatus(detail) {
+    const status = detail.process?.status ?? 'UNKNOWN';
+    byId('pill').textContent = status;
+    byId('pill').style.background = colours[status] || 'gray';
 }
 
-function followStatus(followedPayin) {
+function followStatus({api: followedApi, id}) {
     clearInterval(following);
     const check = async () => {
         try {
-            const payinStatus = await followedPayin.status();
-            showStatus(payinStatus);
-            if (payinStatus.isFinal) clearInterval(following);
+            const detail = await followedApi.getPayin(id);
+            showStatus(detail);
+            if (isFinal(detail)) clearInterval(following);
         } catch (error) {
             if (error.httpCode === 410) return; // SYNQT has no payin with this ID yet
             log(`Status: ${error.message}`);

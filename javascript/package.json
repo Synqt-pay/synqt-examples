@@ -6,6 +6,6 @@
     "local": "npm --prefix ../../javascript run build && npm install --no-save ../../javascript"
   },
   "dependencies": {
-    "@synqt/js": "^0.1.0"
+    "@synqt/js": "^0.3.0"
   }
 }

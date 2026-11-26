@@ -29,8 +29,8 @@ android {
 }
 
 dependencies {
-    implementation("com.synqt:synqt-android:0.1.0") // with synqt.local=true, settings.gradle.kts builds it from the checkout
-    if (synqtCard) "cardImplementation"("com.synqt:synqt-android-card:0.1.0") // the private card add-on, on top of the base SDK
+    implementation("com.synqt:synqt-android:0.3.0") // with synqt.local=true, settings.gradle.kts builds it from the checkout
+    if (synqtCard) "cardImplementation"("com.synqt:synqt-android-card:0.3.0") // the private card add-on, on top of the base SDK
     implementation(libs.androidx.activity) // ComponentActivity, which keeps the ViewModel through a rebuild
     implementation(libs.androidx.lifecycle.viewmodel.ktx) // viewModelScope
     implementation(libs.kotlinx.coroutines.android)

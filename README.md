@@ -2,7 +2,7 @@
 
 Example apps for the SYNQT payment SDKs, one folder per platform: `android/`, `ios/`, `flutter/` and `javascript/` (web). Each is a plain test screen for trying payins against SYNQT's Sandbox or Stable, and its code shows how to call each part of the SDK: the payment sheet, the hosted Payment Web App and following a payin's status.
 
-The examples install the public SDK packages (0.1.0), the way a merchant's app does, with no token or account:
+The examples install the public SDK packages (0.3.0), the way a merchant's app does, with no token or account:
 
 | Platform | Package |
 |---|---|
@@ -110,7 +110,7 @@ A payin ID can be used once. For another payment, get a new token (step 3), whic
 
 ### 1. Open the project
 
-Install Xcode 15 or later (the SDK is tested with Xcode 27.1). Open `ios/SynqtDemo.xcodeproj`. It installs the public package `synqt-ios` (0.1.0) from GitHub, with no account needed.
+Install Xcode 15 or later (the SDK is tested with Xcode 27.1). Open `ios/SynqtDemo.xcodeproj`. It installs the public package `synqt-ios` (0.3.0) from GitHub, with no account needed.
 
 To build from the `ios` checkout next to this repo instead, open `ios/SynqtDemoLocal.xcworkspace`. Its `Local/` folder links to the checkout under the published package name, so Xcode uses it in place of the released package. Open the `.xcodeproj` again to go back. From a terminal, use `-workspace SynqtDemoLocal.xcworkspace` in place of `-project SynqtDemo.xcodeproj`. Pick the `SynqtDemo` scheme and an iPhone or iPad simulator (an iPad shows the sheet as a centred card), or a device with your own signing team.
 
@@ -188,7 +188,7 @@ A payin ID can be used once. For another payment, get a new token (step 3), whic
 Card mode needs access to SYNQT's private card add-on (`synqt-pay/synqt-flutter-card`), for PCI DSS compliant merchants. It is a separate entry point, `card/main.dart`, which turns the add-on on and then starts the same demo. It sits outside `lib/` and analysis, so the demo builds without the add-on. In `flutter/`:
 
 ```sh
-flutter pub add synqt_card --git-url=git@github.com:synqt-pay/synqt-flutter-card.git --git-ref=v0.1.0
+flutter pub add synqt_card --git-url=git@github.com:synqt-pay/synqt-flutter-card.git --git-ref=v0.3.0
 flutter run -t card/main.dart
 ```
 

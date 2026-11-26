@@ -32,7 +32,7 @@ struct DemoView: View {
     @State private var fields: [String: String] = ["currencyCode": "ZAR", "amount": "100.00"]
     @State private var secret = ""
     // Filled from the payin's own options; empty until they are fetched.
-    @State private var methods: [PaymentOption] = []
+    @State private var methods: [AvailablePayinOption] = []
     @State private var method = ""
     @State private var output = ""
     @State private var webURL: URL?
@@ -71,10 +71,10 @@ struct DemoView: View {
                 }
                 Section("Direct API payment method") {
                     Picker("Method", selection: $method) {
-                        ForEach(methods, id: \.code) { Text($0.name ?? $0.code).tag($0.code) }
+                        ForEach(methods, id: \.paymentMethodCode) { Text($0.name ?? $0.paymentMethodCode ?? "").tag($0.paymentMethodCode ?? "") }
                     }
                     action("Enter details and pay (SDK sheet)") { try await payWithSheet() }
-                    action("Get status") { "\(try await payin().status())" }
+                    action("Get status") { "\(try await api().getPayin(idPayin: value("idPayin")))" }
                 }
                 Section { Text(output).font(.system(.footnote, design: .monospaced)).textSelection(.enabled) }
             }
@@ -104,36 +104,35 @@ struct DemoView: View {
         .sheet(item: $webURL) { url in
             PaymentWebView(url: url) {
                 webURL = nil
-                run { "Back from the redirect.\n\n" + (try await latestStatus(payin())) }
+                run { "Back from the redirect.\n\n" + (await latestStatus()) }
             }
         }
     }
 
     private func payWithSheet() async throws -> String {
         guard !method.isEmpty else { throw DemoError("No payment method yet. Tap \"Available payment options\" first.") }
-        let payin = try payin()
+        let checkout = try checkout()
         guard let top = topViewController() else { throw DemoError("No view controller to present from") }
-        guard let sheetResult = try await payin.presentPaymentSheet(from: top, paymentMethodCode: method, prefill: prefill(),
+        guard let accepted = try await checkout.presentPaymentSheet(from: top, paymentMethodCode: method, prefill: prefill(),
                                                                     onPresented: { output = "Payment sheet on screen." },
                                                                     onPaymentStarted: {
-                                                                        opened = payin.id
+                                                                        opened = checkout.id
                                                                         output = "Payment sent to SYNQT."
                                                                     }) else {
-            return "Payment sheet closed without paying.\n\n\(await latestStatus(payin))"
+            return "Payment sheet closed without paying.\n\n\(await latestStatus())"
         }
         let result: String
-        switch sheetResult {
-        case let .redirect(httpMethod, url, formData):
-            if httpMethod == "GET" { webURL = URL(string: url) }
-            result = "Redirect \(httpMethod) \(url)\n\(formData)"
-        case let .instructions(paymentMethod, _):
-            result = "\(paymentMethod)"
+        if let redirect = accepted.redirect() {
+            if redirect.method == "GET", let url = redirect.url { webURL = URL(string: url) }
+            result = "Redirect \(redirect.method ?? "") \(redirect.url ?? "")\n\(redirect.formData())"
+        } else {
+            result = "\(accepted)"
         }
-        return "\(await latestStatus(payin))\n\n\(result)"
+        return "\(await latestStatus())\n\n\(result)"
     }
 
     private func payWithPaymentApp() async throws -> String {
-        let payin = try payin()
+        let checkout = try checkout()
         guard let top = topViewController() else { throw DemoError("No view controller to present from") }
         // The Payment Web App has no first or last name parameter; accountName takes the full name.
         let name = [value("firstName"), value("lastName")].filter { !$0.isEmpty }.joined(separator: " ")
@@ -146,33 +145,36 @@ struct DemoView: View {
         case (true, true): [:]
         }
         // Opens on the picked method, if any; the payer can still choose another.
-        let result = await payin.presentPaymentApp(from: top, merchantCode: value("merchantCode"),
+        let result = await checkout.presentPaymentApp(from: top, merchantCode: value("merchantCode"),
                                                    paymentMethodCode: method.isEmpty ? nil : method,
                                                    prefill: details,
                                                    onPresented: {
-                                                       opened = payin.id
+                                                       opened = checkout.id
                                                        output = "Payment Web App on screen."
                                                    })
         let how = result == .closed ? "Payment Web App closed by the payer." : "Payment Web App returned to the app."
-        return "\(how)\n\n\(await latestStatus(payin))"
+        return "\(how)\n\n\(await latestStatus())"
     }
 
     /// Keeps the status pill current: every 5 seconds until the status can no longer change.
     private func followStatus() async {
-        guard !value("idPayin").isEmpty, !value("token").isEmpty, let payin = try? payin() else {
+        let id = value("idPayin")
+        guard !id.isEmpty, !value("token").isEmpty else {
             pill = ("No payin", .gray)
             return
         }
-        guard opened == payin.id else {
+        let api = api()
+        guard opened == id else {
             pill = ("Not started", .gray)
             return
         }
         while !Task.isCancelled {
             do {
-                let status = try await payin.status().status
-                let colors: [PayinStatus.Status: Color] = [.success: .green, .failed: .red, .refused: .red, .processing: .orange]
-                pill = (status.rawValue, colors[status] ?? .gray)
-                if status.isFinal { return }
+                let detail = try await api.getPayin(idPayin: id)
+                let status = detail.process?.status ?? "UNKNOWN"
+                let colors: [String: Color] = [PaymentStatus.success: .green, PaymentStatus.failed: .red, PaymentStatus.refused: .red, PaymentStatus.processing: .orange]
+                pill = (status, colors[status] ?? .gray)
+                if detail.isFinal { return }
             } catch let error as SynqtAPIError {
                 // SYNQT answers 410 Gone for a payin ID it doesn't have: the Payment Web App before Pay, or a refused payment.
                 pill = error.httpCode == 410 ? ("Not started", .gray) : ("HTTP \(error.httpCode)", .gray)
@@ -185,10 +187,10 @@ struct DemoView: View {
     }
 
     /// Where the payin stands once the sheet closes. For display only: an order is paid when the backend says so.
-    private func latestStatus(_ payin: Payin) async -> String {
+    private func latestStatus() async -> String {
         do {
-            let payinStatus = try await payin.status()
-            return "Status: \(payinStatus.status.rawValue)" + (payinStatus.failureReason.map { "\n\($0.payerMessage) (\($0.code))" } ?? "")
+            let process = try await api().getPayin(idPayin: value("idPayin")).process
+            return "Status: \(process?.status ?? "unknown")" + (process?.failureReasons.map { "\n\($0.payerMessage) (\($0.failureReasonCode ?? ""))" } ?? "")
         } catch let error as SynqtAPIError {
             return "Status unavailable: HTTP \(error.httpCode) " + error.errors.map(\.code).joined(separator: ", ")
         } catch {
@@ -196,14 +198,23 @@ struct DemoView: View {
         }
     }
 
-    /// The order being tested, from the fields on screen.
-    private func payin() throws -> Payin {
+    /// The amount being tested, from the fields on screen.
+    private func money() throws -> MoneyPaymentRequested {
         guard let amount = Decimal(string: value("amount"), locale: Locale(identifier: "en_US_POSIX")) else {
             throw DemoError("Amount must be a number, for example 100.00")
         }
-        return try Synqt(environment).payin(token: value("token"), payinID: value("idPayin"),
-                                            money: Money(amount: amount, currencyCode: value("currencyCode")),
-                                            returnURL: returnURL, callbackURL: callbackURL)
+        return MoneyPaymentRequested(amount: amount, currencyCode: value("currencyCode"))
+    }
+
+    /// The order being tested, for the SDK's sheet and the Payment Web App.
+    private func checkout() throws -> PayinCheckout {
+        try Synqt(environment).checkout(token: value("token"), payinID: value("idPayin"), money: money(),
+                                        returnURL: returnURL, callbackURL: callbackURL)
+    }
+
+    /// SYNQT's payin API with the token on screen, as in the Carpentum Java SDK.
+    private func api() -> IncomingPaymentsApi {
+        IncomingPaymentsApi(synqt: Synqt(environment), accessToken: value("token"))
     }
 
     /// What the SDK sheet fills in for the payer, keyed by field path.
@@ -214,9 +225,9 @@ struct DemoView: View {
 
     /// Fills the method picker with what SYNQT offers for this payin. A nil name means the SDK sheet can't show it.
     private func loadOptions() async throws -> String {
-        let options = try await payin().availablePaymentOptions()
+        let options = try await api().payinAvailablePaymentOptions(PaymentRequested(money: money())).data ?? []
         methods = options.filter { $0.name != nil }
-        method = methods.first?.code ?? ""
+        method = methods.first?.paymentMethodCode ?? ""
         return "\(methods.count) of \(options.count) offered methods can use the SDK sheet\n\n" + options.map { "\($0)" }.joined(separator: "\n")
     }
 
@@ -225,8 +236,8 @@ struct DemoView: View {
         do {
             let operators = try await Synqt(environment).paymentOperators(token: value("token"))
             return "\(operators.count) payment operators\n\n" + operators.map { op in
-                let providers = op.externalProviders.map { "\($0.code) (\($0.name))" }.joined(separator: ", ")
-                return "\(op.code)  \(op.name)" + (providers.isEmpty ? "" : "\n    providers: \(providers)")
+                let providers = (op.externalProviders?.providers ?? []).map { "\($0.code ?? "") (\($0.name ?? ""))" }.joined(separator: ", ")
+                return "\(op.code ?? "")  \(op.name ?? "")" + (providers.isEmpty ? "" : "\n    providers: \(providers)")
             }.joined(separator: "\n")
         } catch let error as SynqtAPIError where error.httpCode == 403 {
             return "HTTP 403: this token cannot list payment operators. Use \"Get token with secret key\", which asks for GET /payment-operators."
@@ -239,7 +250,7 @@ struct DemoView: View {
         // A payin ID is used once, so every token gets a fresh one; reusing it would return the earlier attempt.
         let id = "test-\(Int(Date().timeIntervalSince1970 * 1000))"
         fields["idPayin"] = id
-        let money = try payin().money
+        let money = try money()
         let body: [String: Any] = [
             "merchantCode": value("merchantCode"), "secret": secret, "validitySecs": 1800,
             "operations": ["POST /payins/!availablePaymentOptions", "POST /payins/\(id)", "GET /payins/\(id)", "GET /merchant-info", "GET /payment-operators"],

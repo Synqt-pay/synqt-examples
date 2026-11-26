@@ -43,7 +43,7 @@ class _DemoPageState extends State<DemoPage> {
       key: TextEditingController(),
   };
   // Filled from the payin's own options; empty until they are fetched.
-  var _methods = <PaymentOption>[];
+  var _methods = <AvailablePayinOption>[];
   String? _method;
   var _output = '';
   var _pill = ('No payin', Colors.grey);
@@ -79,14 +79,24 @@ class _DemoPageState extends State<DemoPage> {
 
   String _value(String key) => _fields[key]!.text.trim();
 
-  /// The order being tested, from the fields on screen.
-  Payin _payin() => Synqt(_environment).payin(
+  /// The amount being tested, from the fields on screen.
+  MoneyPaymentRequested _money() {
+    final amount = num.tryParse(_value('amount'));
+    if (amount == null) throw const FormatException('Amount must be a number, for example 100.00');
+    return MoneyPaymentRequested(amount: amount, currencyCode: _value('currencyCode'));
+  }
+
+  /// The order being tested, for the SDK's sheet and the Payment Web App.
+  PayinCheckout _checkout() => Synqt(_environment).checkout(
     token: _value('token'),
     payinId: _value('idPayin'),
-    money: Money(amount: _value('amount'), currencyCode: _value('currencyCode')),
+    money: _money(),
     returnUrl: returnUrl,
     callbackUrl: callbackUrl,
   );
+
+  /// SYNQT's payin API with the token on screen, as in the Carpentum Java SDK.
+  IncomingPaymentsApi _api() => IncomingPaymentsApi.create(Synqt(_environment), _value('token'));
 
   /// What the SDK sheet fills in for the payer, keyed by field path.
   Map<String, String> _prefill() => {
@@ -98,71 +108,72 @@ class _DemoPageState extends State<DemoPage> {
   Future<String> _payWithSheet() async {
     final method = _method;
     if (method == null) return 'No payment method yet. Tap "Available payment options" first.';
-    final payin = _payin();
-    final sheetResult = await payin.presentPaymentSheet(
+    final checkout = _checkout();
+    final accepted = await checkout.presentPaymentSheet(
       context,
       paymentMethodCode: method,
       prefill: _prefill(),
       onPresented: () => setState(() => _output = 'Payment sheet on screen.'),
       onPaymentStarted: () {
         setState(() => _output = 'Payment sent to SYNQT.');
-        _followStatus(payin);
+        _followStatus(checkout.id);
       },
     );
-    switch (sheetResult) {
-      case null:
-        return 'Payment sheet closed without paying.\n\n${await _latestStatus(payin)}';
-      case RedirectResult(:final httpMethod, :final url, :final formData):
-        // A direct-API GET redirect (bank login and the like) opens in the browser here.
-        if (httpMethod == 'GET') unawaited(launchUrl(Uri.parse(url)));
-        return '${await _latestStatus(payin)}\n\nRedirect $httpMethod $url\n$formData';
-      case InstructionsResult(:final paymentMethod):
-        return '${await _latestStatus(payin)}\n\n$paymentMethod';
+    if (accepted == null) return 'Payment sheet closed without paying.\n\n${await _latestStatus(checkout.id)}';
+    final redirect = accepted.redirect();
+    if (redirect != null) {
+      // A direct-API GET redirect (bank login and the like) opens in the browser here.
+      final url = redirect.url;
+      if (redirect.method == 'GET' && url != null) unawaited(launchUrl(Uri.parse(url)));
+      return '${await _latestStatus(checkout.id)}\n\nRedirect ${redirect.method} $url\n${redirect.formData()}';
     }
+    return '${await _latestStatus(checkout.id)}\n\n${(accepted as PayinAcceptedMethodResponse).paymentMethodResponse}';
   }
 
   Future<String> _payWithPaymentApp() async {
-    final payin = _payin();
+    final checkout = _checkout();
     // The Payment Web App has no first or last name parameter; accountName takes the full name.
     final prefill = {
       'emailAddress': _value('emailAddress'),
       'accountName': [_value('firstName'), _value('lastName')].where((name) => name.isNotEmpty).join(' '),
     }..removeWhere((_, value) => value.isEmpty);
-    final result = await payin.presentPaymentApp(
+    final result = await checkout.presentPaymentApp(
       context,
       merchantCode: _value('merchantCode'),
       paymentMethodCode: _method, // opens on the picked method, if any; the payer can still choose another
       prefill: prefill,
       onPresented: () {
         setState(() => _output = 'Payment Web App on screen.');
-        _followStatus(payin);
+        _followStatus(checkout.id);
       },
     );
     final how = result is PaymentAppClosed
         ? 'Payment Web App closed by the payer.'
         : 'Payment Web App returned to the app.';
-    return '$how\n\n${await _latestStatus(payin)}';
+    return '$how\n\n${await _latestStatus(checkout.id)}';
   }
 
   /// Keeps the status pill current: every 5 seconds until the status can no longer change.
-  void _followStatus(Payin payin) {
+  void _followStatus(String id) {
     _poll?.cancel();
+    final api = _api();
     Future<void> check() async {
       try {
-        final status = (await payin.status()).status;
+        final detail = await api.getPayin(id);
+        final status = detail.process?.status ?? 'UNKNOWN';
         if (!mounted) return;
         setState(
           () => _pill = (
-            status.code,
+            status,
             switch (status) {
-              PayinState.success => Colors.green,
-              PayinState.failed || PayinState.refused => Colors.red,
-              PayinState.processing => Colors.orange,
-              PayinState.unknown => Colors.grey,
+              PaymentStatus.success => Colors.green,
+              PaymentStatus.failed || PaymentStatus.refused => Colors.red,
+              PaymentStatus.processing => Colors.orange,
+              _ => Colors.grey,
             },
           ),
         );
-        if (status.isFinal) _poll?.cancel();
+        if (detail.isFinal) _poll?.cancel();
       } on SynqtApiException catch (error) {
         // SYNQT answers 410 Gone for a payin ID it doesn't have: the Payment Web App before Pay, or a refused payment.
         if (mounted) setState(() => _pill = (error.httpCode == 410 ? 'Not started' : 'HTTP ${error.httpCode}', Colors.grey));
@@ -176,11 +187,11 @@ class _DemoPageState extends State<DemoPage> {
   }
 
   /// Where the payin stands once the sheet closes. For display only: an order is paid when the backend says so.
-  Future<String> _latestStatus(Payin payin) async {
+  Future<String> _latestStatus(String id) async {
     try {
-      final payinStatus = await payin.status();
-      final failure = payinStatus.failureReason;
-      return 'Status: ${payinStatus.status.code}${failure == null ? '' : '\n${failure.payerMessage} (${failure.code})'}';
+      final process = (await _api().getPayin(id)).process;
+      final failure = process?.failureReasons;
+      return 'Status: ${process?.status}${failure == null ? '' : '\n${failure.payerMessage} (${failure.failureReasonCode})'}';
     } on SynqtApiException catch (error) {
       return 'Status unavailable: HTTP ${error.httpCode} ${error.errors.map((apiError) => apiError.code).join(', ')}';
     } on Exception {
@@ -190,10 +201,10 @@ class _DemoPageState extends State<DemoPage> {
 
   /// Fills the method picker with what SYNQT offers for this payin. A null name means the SDK sheet can't show it.
   Future<String> _loadOptions() async {
-    final options = await _payin().availablePaymentOptions();
+    final options = (await _api().payinAvailablePaymentOptions(PaymentRequested(money: _money()))).data ?? [];
     setState(() {
       _methods = options.where((option) => option.name != null).toList();
-      _method = _methods.firstOrNull?.code;
+      _method = _methods.firstOrNull?.paymentMethodCode;
     });
     return '${_methods.length} of ${options.length} offered methods can use the SDK sheet\n\n${options.join('\n')}';
   }
@@ -203,7 +214,7 @@ class _DemoPageState extends State<DemoPage> {
     try {
       final operators = await Synqt(_environment).paymentOperators(token: _value('token'));
       return '${operators.length} payment operators\n\n${operators.map((op) {
-        final providers = op.externalProviders.map((provider) => '${provider.code} (${provider.name})').join(', ');
+        final providers = (op.externalProviders?.providers ?? []).map((provider) => '${provider.code} (${provider.name})').join(', ');
         return '${op.code}  ${op.name}${providers.isEmpty ? '' : '\n    providers: $providers'}';
       }).join('\n')}';
     } on SynqtApiException catch (error) {
@@ -218,7 +229,7 @@ class _DemoPageState extends State<DemoPage> {
     // A payin ID is used once, so every token gets a fresh one; reusing it would return the earlier attempt.
     final id = 'test-${DateTime.now().millisecondsSinceEpoch}';
     _fields['idPayin']!.text = id;
-    final money = _payin().money;
+    final money = _money();
     final response = await http.post(
       Uri.parse('${_environment.apiBaseUrl}/auth-tokens'),
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-API-Version': '2'},
@@ -328,11 +339,14 @@ class _DemoPageState extends State<DemoPage> {
           isExpanded: true,
           hint: const Text('Method'),
           value: _method,
-          items: [for (final method in _methods) DropdownMenuItem(value: method.code, child: Text(method.name ?? method.code))],
+          items: [
+            for (final method in _methods)
+              DropdownMenuItem(value: method.paymentMethodCode, child: Text(method.name ?? method.paymentMethodCode ?? '')),
+          ],
           onChanged: (code) => setState(() => _method = code),
         ),
         _action('Enter details and pay (SDK sheet)', _payWithSheet),
-        _action('Get status', () async => '${await _payin().status()}'),
+        _action('Get status', () async => '${await _api().getPayin(_value('idPayin'))}'),
         SelectableText(_output, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
       ],
     ),
